@@ -661,22 +661,36 @@ void WindowCovering::HandleInputEvent01(Direction dir, Input::Event ev,
     HandleInputEventNotCalibrated();
     return;
   }
-  if (ev != Input::Event::kChange) return;
+  /// Also listen for "long". Ultra short presses trigger "long" events. Sometimes single events.
+  if (ev != Input::Event::kChange && ev != Input::Event::kLong && ev != Input::Event::kSingle) return;
   bool stop = false;
   bool is_toggle = (cfg_->in_mode == (int) InMode::kSeparateToggle);
   if (state) {
     if (moving_dir_ == Direction::kNone) {
       float pos = (dir == Direction::kOpen ? kFullyOpen : kFullyClosed);
+      // Account for shutter imprecision. It a button is pressed at open/close state, allow a bit of movement 
+      const float precision = 2.0;
+      if (dir == Direction::kOpen && cur_pos_ + precision >= kFullyOpen) {
+        // If shutter is open, set position to 98% to enable movement
+        cur_pos_ = kFullyOpen - precision;
+        LOG(LL_INFO, ("WC %d: Button press close to open state. Overwrite current position %.2f", id(), cur_pos_));
+      }
+      if (dir == Direction::kClose && cur_pos_ - precision <= kFullyClosed) {
+        // If shutter is close, set position to 2% to enable movement
+        cur_pos_ = kFullyClosed + precision;
+        LOG(LL_INFO, ("WC %d: Button press close to closed state. Overwrite current position %.2f", id(), cur_pos_));
+      }
       last_move_dir_ = dir;
       SetTgtPos(pos, "ext");
-    } else {
+    }/* else {
       stop = true;
-    }
-  } else if (is_toggle && moving_dir_ == dir) {
+    }*/
+  } else /*if (is_toggle && moving_dir_ == dir)*/ {
     stop = true;
   }
   if (stop) {
     // Run state machine before to update cur_pos_.
+    LOG(LL_INFO, ("WC %d: Stopping at current position %.2f", id(), cur_pos_));
     RunOnce();
     SetTgtPos(cur_pos_, "ext");
   }
